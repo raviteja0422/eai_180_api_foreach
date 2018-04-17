@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:mulexml="http://www.mulesoft.org/schema/mule/xml" xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:apikit="http://www.mulesoft.org/schema/mule/apikit" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:spring="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/apikit http://www.mulesoft.org/schema/mule/apikit/current/mule-apikit.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.1.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/xml http://www.mulesoft.org/schema/mule/xml/current/mule-xml.xsd">
+    <http:listener-config name="edi180-httpListenerConfig" host="0.0.0.0" port="8081" doc:name="HTTP Listener Configuration"/>
+    <apikit:config name="edi180-config" raml="edi180.raml" consoleEnabled="false" doc:name="Router"/>
+    <flow name="edi180-main">
+        <http:listener config-ref="edi180-httpListenerConfig" path="/api/*" doc:name="HTTP"/>
+        <apikit:router config-ref="edi180-config" doc:name="APIkit Router"/>
+        <exception-strategy ref="edi180-apiKitGlobalExceptionMapping" doc:name="Reference Exception Strategy"/>
+    </flow>
+    <flow name="edi180-console">
+        <http:listener config-ref="edi180-httpListenerConfig" path="/console/*" doc:name="HTTP"/>
+        <apikit:console config-ref="edi180-config" doc:name="APIkit Console"/>
+    </flow>
+    <flow name="post:/edi:edi180-config">
+        <logger message="EDI_Input_Request:#[message.payloadAs(java.lang.String)]" level="INFO" doc:name="Logger"/>
+        <async doc:name="Async">
+            <flow-ref name="edi180Flow" doc:name="Flow Reference"/>
+        </async>
+        <dw:transform-message doc:name="Transform Message">
+            <dw:input-payload doc:sample="sample_data\EDI-180.xml"/>
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+{
+	EDI-180: {
+		ISA: {
+			ISA06: payload.EDI-180.ISA.ISA06
+		},
+		BGN: {
+			BGN02: payload.EDI-180.BGN.BGN02,
+			BGN03: payload.EDI-180.BGN.BGN03,
+			BGN04: payload.EDI-180.BGN.BGN04,
+			(payload.EDI-180.BGN.*N9 map ((n9 , indexOfN9) -> {
+				DTM: {
+					DTM02: payload.EDI-180.BGN.DTM.DTM02
+				},
+				N9: {
+					N902: n9.N902 when n9.N901 == 'ST' or n9.N901 == 'PO' otherwise '',
+					N903: n9.N903 when n9.N901 == 'ST' or n9.N901 == 'MR' otherwise ''
+				},
+				PER: {
+					PER02: (payload.EDI-180.BGN.PER.PER02) when payload.EDI-180.BGN.PER.PER01 == 'AJ' otherwise '',
+					PER06: payload.EDI-180.BGN.PER.PER06 when payload.EDI-180.BGN.PER.PER01 == 'AJ' otherwise '',
+					PER08: payload.EDI-180.BGN.PER.PER08 when payload.EDI-180.BGN.PER.PER01 == 'AJ' otherwise ""
+				// ++ '' ++ payload.EDI-180.BGN.PER.PER09
+				},
+				SAC: {
+					SAC05: payload.EDI-180.BGN.SAC.SAC05
+				},
+				PartyIdentification: {
+					N1: {
+						N103: payload.EDI-180.BGN.PartyIdentification.N1.N103
+					}
+				}
+			}))
+		}
+	}
+}
+
+]]></dw:set-payload>
+        </dw:transform-message>
+        <logger message="Headers_Transformed_output:#[payload]" level="INFO" doc:name="Logger"/>
+        <file:outbound-endpoint path="src/test/resources/out/" outputPattern="Header_#[function:dateStamp].json" responseTimeout="10000" doc:name="File"/>
+        <set-payload value="{&quot;message&quot;: &quot;Success&quot;}" doc:name="Set Payload"/>
+
+<!--         <set-payload value="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; standalone=&quot;yes&quot; ?&gt;&#xD;&#xA;&lt;EDI-180&gt;&#xD;&#xA;&#x9;&lt;ISA&gt;&#xD;&#xA;&#x9;&#x9;&lt;ISA01&gt;00&lt;/ISA01&gt;&#xD;&#xA;&#x9;&#x9;&lt;ISA02/&gt;&#xD;&#xA;&#x9;&#x9;&lt;ISA03&gt;00&lt;/ISA03&gt;&#xD;&#xA;&#x9;&#x9;&lt;ISA04/&gt;&#xD;&#xA;&#x9;&#x9;&lt;ISA05&gt;14&lt;/ISA05&gt;&#xD;&#xA;&#x9;&#x9;&lt;ISA06&gt;072271711USSO&lt;/ISA06&gt;&#xD;&#xA;&#x9;&#x9;&lt;ISA07&gt;12&lt;/ISA07&gt;&#xD;&#xA;&#x9;&#x9;&lt;ISA08&gt;6512645150&lt;/ISA08&gt;&#xD;&#xA;&#x9;&#x9;&lt;ISA09&gt;180309&lt;/ISA09&gt;&#xD;&#xA;&#x9;&#x9;&lt;ISA10&gt;0926&lt;/ISA10&gt;&#xD;&#xA;&#x9;&#x9;&lt;ISA11&gt;^&lt;/ISA11&gt;&#xD;&#xA;&#x9;&#x9;&lt;ISA12&gt;00406&lt;/ISA12&gt;&#xD;&#xA;&#x9;&#x9;&lt;ISA13&gt;001135046&lt;/ISA13&gt;&#xD;&#xA;&#x9;&#x9;&lt;ISA14&gt;0&lt;/ISA14&gt;&#xD;&#xA;&#x9;&#x9;&lt;ISA15&gt;P&lt;/ISA15&gt;&#xD;&#xA;&#x9;&#x9;&lt;ISA16/&gt;&#xD;&#xA;&#x9;&lt;/ISA&gt;&#xD;&#xA;&#x9;&lt;GS&gt;&#xD;&#xA;&#x9;&#x9;&lt;GS01&gt;AN&lt;/GS01&gt;&#xD;&#xA;&#x9;&#x9;&lt;GS02&gt;072271711USSO&lt;/GS02&gt;&#xD;&#xA;&#x9;&#x9;&lt;GS03&gt;6512645150&lt;/GS03&gt;&#xD;&#xA;&#x9;&#x9;&lt;GS04&gt;20180309&lt;/GS04&gt;&#xD;&#xA;&#x9;&#x9;&lt;GS05&gt;0926&lt;/GS05&gt;&#xD;&#xA;&#x9;&#x9;&lt;GS06&gt;500132&lt;/GS06&gt;&#xD;&#xA;&#x9;&#x9;&lt;GS07&gt;X&lt;/GS07&gt;&#xD;&#xA;&#x9;&#x9;&lt;GS08&gt;004060&lt;/GS08&gt;&#xD;&#xA;&#x9;&lt;/GS&gt;&#xD;&#xA;&#x9;&lt;ST&gt;&#xD;&#xA;&#x9;&#x9;&lt;ST01&gt;180&lt;/ST01&gt;&#xD;&#xA;&#x9;&#x9;&lt;ST02&gt;0133&lt;/ST02&gt;&#xD;&#xA;&#x9;&lt;/ST&gt;&#xD;&#xA;&#x9;&lt;BGN&gt;&#xD;&#xA;&#x9;&#x9;&lt;BGN01&gt;00&lt;/BGN01&gt;&#xD;&#xA;&#x9;&#x9;&lt;BGN02&gt;16026116&lt;/BGN02&gt;&#xD;&#xA;&#x9;&#x9;&lt;BGN03&gt;20180309&lt;/BGN03&gt;&#xD;&#xA;&#x9;&#x9;&lt;BGN04&gt;09263513&lt;/BGN04&gt;&#xD;&#xA;&#x9;&#x9;&lt;BGN07&gt;RQ&lt;/BGN07&gt;&#xD;&#xA;&#x9;&#x9;&lt;DTM&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;DTM01&gt;196&lt;/DTM01&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;DTM02&gt;20180309&lt;/DTM02&gt;&#xD;&#xA;&#x9;&#x9;&lt;/DTM&gt;&#xD;&#xA;&#x9;&#x9;&lt;N9&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;N901&gt;DP&lt;/N901&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;N902&gt;30&lt;/N902&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;N903&gt;MILLWORK&lt;/N903&gt;&#xD;&#xA;&#x9;&#x9;&lt;/N9&gt;&#xD;&#xA;&#x9;&#x9;&lt;N9&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;N901&gt;ST&lt;/N901&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;N902&gt;1602&lt;/N902&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;N903&gt;BRANDYWINE&lt;/N903&gt;&#xD;&#xA;&#x9;&#x9;&lt;/N9&gt;&#xD;&#xA;&#x9;&#x9;&lt;N9&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;N901&gt;MK&lt;/N901&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;N902&gt;0&lt;/N902&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;N903/&gt;&#xD;&#xA;&#x9;&#x9;&lt;/N9&gt;&#xD;&#xA;&#x9;&#x9;&lt;N9&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;N901&gt;MR&lt;/N901&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;N902&gt;60259501&lt;/N902&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;N903/&gt;&#xD;&#xA;&#x9;&#x9;&lt;/N9&gt;&#xD;&#xA;&#x9;&#x9;&lt;N9&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;N901&gt;PO&lt;/N901&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;N902&gt;02533764&lt;/N902&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;N903/&gt;&#xD;&#xA;&#x9;&#x9;&lt;/N9&gt;&#xD;&#xA;&#x9;&#x9;&lt;PER&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;PER01&gt;AJ&lt;/PER01&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;PER02&gt;Customer Solutions&lt;/PER02&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;PER05&gt;WP&lt;/PER05&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;PER06&gt;(800)777-3626&lt;/PER06&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;PER07&gt;FX&lt;/PER07&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;PER08&gt;(657)275-6604&lt;/PER08&gt;&#xD;&#xA;&#x9;&#x9;&lt;/PER&gt;&#xD;&#xA;&#x9;&#x9;&lt;SAC&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;SAC01&gt;N&lt;/SAC01&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;SAC02&gt;I132&lt;/SAC02&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;SAC05&gt;13905&lt;/SAC05&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;SAC09&gt;EA&lt;/SAC09&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;SAC10&gt;1&lt;/SAC10&gt;&#xD;&#xA;&#x9;&#x9;&lt;/SAC&gt;&#xD;&#xA;&#x9;&#x9;&lt;PartyIdentification&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;N1&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;N101&gt;VN&lt;/N101&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;N102&gt;S/O Andersen&lt;/N102&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;N103/&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;N104/&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;/N1&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;N3&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;N301&gt;Andersen Corporation&lt;/N301&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;N302&gt;4141 Dixon St.&lt;/N302&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;/N3&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;N4&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;N401&gt;Bayport&lt;/N401&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;N402&gt;MN&lt;/N402&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;N403&gt;50313&lt;/N403&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;N404&gt;US&lt;/N404&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;/N4&gt;&#xD;&#xA;&#x9;&#x9;&lt;/PartyIdentification&gt;&#xD;&#xA;&#x9;&#x9;&lt;BasicBaselineItemData&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;BLI&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;BLI01&gt;SK&lt;/BLI01&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;BLI02&gt;754774&lt;/BLI02&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;BLI03&gt;1&lt;/BLI03&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;BLI04&gt;EA&lt;/BLI04&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;BLI05&gt;NET&lt;/BLI05&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;BLI06&gt;139.05&lt;/BLI06&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;BLI07/&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;BLI08&gt;VP&lt;/BLI08&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;BLI09&gt;S/O ACCESS&lt;/BLI09&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;/BLI&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;N9&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;N901&gt;25&lt;/N901&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;N902&gt;1 Manufacturer Defect&lt;/N902&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;N903/&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;/N9&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;N9&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;N901&gt;L1&lt;/N901&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;N902&gt;warranty issue credit issued&lt;/N902&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;N903/&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;/N9&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;N9&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;N901&gt;ZZ&lt;/N901&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;N902&gt;7 Return For Credit Defective&lt;/N902&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;N903/&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;/N9&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;PID&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;PID01&gt;F&lt;/PID01&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;PID02/&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;PID03/&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;PID04/&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;PID05&gt;S/O REPLACEMENT PARTS&lt;/PID05&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;/PID&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;RDR&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;RDR01/&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;RDR02/&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;RDR03/&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;RDR04&gt;200 Off-Site&lt;/RDR04&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;RDR05&gt;N&lt;/RDR05&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;/RDR&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;NTE&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;NTE01&gt;ZZZ&lt;/NTE01&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;NTE02&gt;S&lt;/NTE02&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;/NTE&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;CodeSourceInformation&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;LM&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&#x9;&lt;LM01&gt;ZZ&lt;/LM01&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&#x9;&lt;LM02/&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;/LM&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;LQ&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&#x9;&lt;LQ01&gt;TP&lt;/LQ01&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&#x9;&lt;LQ02&gt;86561&lt;/LQ02&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&#x9;&lt;/LQ&gt;&#xD;&#xA;&#x9;&#x9;&#x9;&lt;/CodeSourceInformation&gt;&#xD;&#xA;&#x9;&#x9;&lt;/BasicBaselineItemData&gt;&#xD;&#xA;&#x9;&#x9;&lt;BasicBaselineItemData&gt;&#xD;&#xA;      &lt;BLI&gt;&#xD;&#xA;        &lt;BLI01&gt;SK&lt;/BLI01&gt;&#xD;&#xA;        &lt;BLI02&gt;697609&lt;/BLI02&gt;&#xD;&#xA;        &lt;BLI03&gt;1&lt;/BLI03&gt;&#xD;&#xA;        &lt;BLI04&gt;EA&lt;/BLI04&gt;&#xD;&#xA;        &lt;BLI05&gt;NET&lt;/BLI05&gt;&#xD;&#xA;        &lt;BLI06&gt;183.89&lt;/BLI06&gt;&#xD;&#xA;        &lt;BLI07/&gt;&#xD;&#xA;        &lt;BLI08&gt;VP&lt;/BLI08&gt;&#xD;&#xA;        &lt;BLI09&gt;22441&lt;/BLI09&gt;&#xD;&#xA;      &lt;/BLI&gt;&#xD;&#xA;      &lt;N9&gt;&#xD;&#xA;        &lt;N901&gt;25&lt;/N901&gt;&#xD;&#xA;        &lt;N902&gt;14 Customer Choice&lt;/N902&gt;&#xD;&#xA;        &lt;N903/&gt;&#xD;&#xA;      &lt;/N9&gt;&#xD;&#xA;      &lt;N9&gt;&#xD;&#xA;        &lt;N901&gt;L1&lt;/N901&gt;&#xD;&#xA;        &lt;N902&gt;Store S/O Cancelled&lt;/N902&gt;&#xD;&#xA;        &lt;N903/&gt;&#xD;&#xA;      &lt;/N9&gt;&#xD;&#xA;      &lt;N9&gt;&#xD;&#xA;        &lt;N901&gt;ZZ&lt;/N901&gt;&#xD;&#xA;        &lt;N902&gt;9 Return For Credit Non Defective&lt;/N902&gt;&#xD;&#xA;        &lt;N903/&gt;&#xD;&#xA;      &lt;/N9&gt;&#xD;&#xA;      &lt;PID&gt;&#xD;&#xA;        &lt;PID01&gt;F&lt;/PID01&gt;&#xD;&#xA;        &lt;PID02/&gt;&#xD;&#xA;        &lt;PID03/&gt;&#xD;&#xA;        &lt;PID04/&gt;&#xD;&#xA;        &lt;PID05&gt;S/O K900 SELF STORING-STD SIZE COLOR&lt;/PID05&gt;&#xD;&#xA;      &lt;/PID&gt;&#xD;&#xA;      &lt;RDR&gt;&#xD;&#xA;        &lt;RDR01/&gt;&#xD;&#xA;        &lt;RDR02/&gt;&#xD;&#xA;        &lt;RDR03/&gt;&#xD;&#xA;        &lt;RDR04&gt;300 Awaiting Insp And RGA&lt;/RDR04&gt;&#xD;&#xA;        &lt;RDR05&gt;Y&lt;/RDR05&gt;&#xD;&#xA;      &lt;/RDR&gt;&#xD;&#xA;      &lt;NTE&gt;&#xD;&#xA;        &lt;NTE01&gt;ZZZ&lt;/NTE01&gt;&#xD;&#xA;        &lt;NTE02&gt;S&lt;/NTE02&gt;&#xD;&#xA;      &lt;/NTE&gt;&#xD;&#xA;      &lt;CodeSourceInformation&gt;&#xD;&#xA;        &lt;LM&gt;&#xD;&#xA;          &lt;LM01&gt;ZZ&lt;/LM01&gt;&#xD;&#xA;          &lt;LM02/&gt;&#xD;&#xA;        &lt;/LM&gt;&#xD;&#xA;        &lt;LQ&gt;&#xD;&#xA;          &lt;LQ01&gt;TP&lt;/LQ01&gt;&#xD;&#xA;          &lt;LQ02&gt;98182001107118169&lt;/LQ02&gt;&#xD;&#xA;        &lt;/LQ&gt;&#xD;&#xA;      &lt;/CodeSourceInformation&gt;&#xD;&#xA;    &lt;/BasicBaselineItemData&gt;&#xD;&#xA;&#x9;&lt;/BGN&gt;&#xD;&#xA;&#x9;&lt;CTT&gt;&#xD;&#xA;&#x9;&#x9;&lt;CTT01/&gt;&#xD;&#xA;&#x9;&lt;/CTT&gt;&#xD;&#xA;&#x9;&lt;SE&gt;&#xD;&#xA;&#x9;&#x9;&lt;SE01&gt;24&lt;/SE01&gt;&#xD;&#xA;&#x9;&#x9;&lt;SE02&gt;0133&lt;/SE02&gt;&#xD;&#xA;&#x9;&lt;/SE&gt;&#xD;&#xA;&#x9;&lt;GE&gt;&#xD;&#xA;&#x9;&#x9;&lt;GE01&gt;1&lt;/GE01&gt;&#xD;&#xA;&#x9;&#x9;&lt;GE02&gt;500132&lt;/GE02&gt;&#xD;&#xA;&#x9;&lt;/GE&gt;&#xD;&#xA;&#x9;&lt;IEA&gt;&#xD;&#xA;&#x9;&#x9;&lt;IEA01&gt;1&lt;/IEA01&gt;&#xD;&#xA;&#x9;&#x9;&lt;IEA02&gt;001135046&lt;/IEA02&gt;&#xD;&#xA;&#x9;&lt;/IEA&gt;&#xD;&#xA;&lt;/EDI-180&gt;" doc:name="Set Payload"/>
+ -->    </flow>
+    <flow name="edi180Flow">
+        <logger message="** EDIRequest_ProcessDetails_SOF ** #[message.payloadAs(java.lang.String)]" level="INFO" doc:name="ProcessDetails_StartOfTheFlow"/>
+        <set-variable variableName="HeaderId" value="#[xpath3('EDI-180/ISA/ISA01')]" doc:name="Variable"/>
+        <dw:transform-message doc:name="ProcessDetailInfo" metadata:id="2b7ec9bc-a590-48ce-a958-98d58131fa88">
+         <dw:input-payload   doc:sample="F:\MuleSoft Training\Anderson\MuleSoft - Scenario for XML parsing\THD_RGA180_MultiLine_IB -Created.xml"/>
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+// EDI-180: {
+  //BGN: {
+   BasicBaselineItemData:payload.EDI-180.BGN.*BasicBaselineItemData map ((basicBaselineItemDatum , indexOfBasicBaselineItemDatum) -> {
+   
+     BLI: {
+      BLI02: basicBaselineItemDatum.BLI.BLI02,
+      BLI03: basicBaselineItemDatum.BLI.BLI03,
+      BLI04: basicBaselineItemDatum.BLI.BLI04,
+      BLI05: basicBaselineItemDatum.BLI.BLI05,
+      BLI06: basicBaselineItemDatum.BLI.BLI06,
+      BLI09: basicBaselineItemDatum.BLI.BLI09 when basicBaselineItemDatum.BLI.BLI08 == 'VP' otherwise ''
+     },
+     (basicBaselineItemDatum.*N9 map ((n9 , indexOfN9) -> {
+      N9: {
+       N901:n9.N901,
+       N902: n9.N902 when n9.N901 == '25' or n9.N901 == 'L1' or n9.N901 == 'ZZ' otherwise ""
+      }
+      })),
+      PID: {
+       PID05: payload.EDI-180.BGN.BasicBaselineItemData.PID.PID05
+      },
+      RDR: {
+       RDR05: payload.EDI-180.BGN.BasicBaselineItemData.RDR.RDR05
+      },
+      CodeSourceInformation: {
+       LQ: {
+        LQ02: payload.EDI-180.BGN.BasicBaselineItemData.CodeSourceInformation.LQ.LQ02
+       }
+      }
+     
+    
+   })
+  
+  
+  
+ 
+ 
+ }]]></dw:set-payload>
+        </dw:transform-message>
+
+        <foreach collection="#[payload.BasicBaselineItemData]" doc:name="For Each">
+            <dw:transform-message doc:name="Transform Message">
+                <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+{
+	EDI-180:{
+		ISA:{
+			ISA01:flowVars.HeaderId
+            },
+	BasicBaselineItemData:payload
+}	
+}]]></dw:set-payload>
+            </dw:transform-message>
+            <logger message="**********#[payload]" level="INFO" doc:name="Logger"/>
+            <file:outbound-endpoint path="src/test/resources/out/" outputPattern="Lineitems_#[function:dateStamp]_#[json:EDI-180/BasicBaselineItemData/BLI/BLI02].json" responseTimeout="10000" doc:name="File"/>
+        </foreach>
+    
+    </flow>
+
+
+    <apikit:mapping-exception-strategy name="edi180-apiKitGlobalExceptionMapping">
+        <apikit:mapping statusCode="404">
+            <apikit:exception value="org.mule.module.apikit.exception.NotFoundException" />
+            <set-property propertyName="Content-Type" value="application/json" doc:name="Property"/>
+            <set-payload value="{ &quot;message&quot;: &quot;Resource not found&quot; }" doc:name="Set Payload"/>
+        </apikit:mapping>
+        <apikit:mapping statusCode="405">
+            <apikit:exception value="org.mule.module.apikit.exception.MethodNotAllowedException" />
+            <set-property propertyName="Content-Type" value="application/json" doc:name="Property"/>
+            <set-payload value="{ &quot;message&quot;: &quot;Method not allowed&quot; }" doc:name="Set Payload"/>
+        </apikit:mapping>
+        <apikit:mapping statusCode="415">
+            <apikit:exception value="org.mule.module.apikit.exception.UnsupportedMediaTypeException" />
+            <set-property propertyName="Content-Type" value="application/json" doc:name="Property"/>
+            <set-payload value="{ &quot;message&quot;: &quot;Unsupported media type&quot; }" doc:name="Set Payload"/>
+        </apikit:mapping>
+        <apikit:mapping statusCode="406">
+            <apikit:exception value="org.mule.module.apikit.exception.NotAcceptableException" />
+            <set-property propertyName="Content-Type" value="application/json" doc:name="Property"/>
+            <set-payload value="{ &quot;message&quot;: &quot;Not acceptable&quot; }" doc:name="Set Payload"/>
+        </apikit:mapping>
+        <apikit:mapping statusCode="400">
+            <apikit:exception value="org.mule.module.apikit.exception.BadRequestException" />
+            <set-property propertyName="Content-Type" value="application/json" doc:name="Property"/>
+            <set-payload value="{ &quot;message&quot;: &quot;Bad request&quot; }" doc:name="Set Payload"/>
+        </apikit:mapping>
+    </apikit:mapping-exception-strategy>
+</mule>
