@@ -1,0 +1,37 @@
+{
+  "BasicBaselineItemData": [
+    {
+      "BLI": {
+        "BLI02": "754774",
+        "BLI03": "1",
+        "BLI04": "EA",
+        "BLI05": "NET",
+        "BLI06": "139.05",
+        "BLI09": "S/O ACCESS"
+      },
+      "N9": {
+        "N901": "25",
+        "N902": "1 Manufacturer Defect"
+      },
+      "N9": {
+        "N901": "L1",
+        "N902": "warranty issue credit issued"
+      },
+      "N9": {
+        "N901": "ZZ",
+        "N902": "NotMatched"
+      },
+      "PID": {
+        "PID05": "S/O REPLACEMENT PARTS"
+      },
+      "RDR": {
+        "RDR05": "N"
+      },
+      "CodeSourceInformation": {
+        "LQ": {
+          "LQ02": "86561"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+#%RAML 1.0
+title: EDI180 API
+version: 1.0
+baseUri: http://localhost:8081/api
+/edi:
+ displayName: Receiving Header and Line Details
+ post:
+   description: Receiving Header and Line Details
+   body: 
+    application/xml:
+      example: !include Examples/EDI_Input.xml
+   responses: 
+      201:
+        body: 
+          application/json:
+           example: {"message": "Success"}
+     
+            
+          
+     
+
+     
+

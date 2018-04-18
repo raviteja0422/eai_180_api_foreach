@@ -1,0 +1,10 @@
+{
+    "inputMessageMetadata": {
+        "flowVariables": {
+            "OriginalPayload": {}
+        }
+    },
+    "outputMessageMetadata": {},
+    "id": "e923685e-2b12-4460-a5ac-5c9821c0c874",
+    "version": "5.2.0.0"
+}

@@ -1,0 +1,24 @@
+#%RAML 1.0
+title: EDI180 API
+baseUri: https://mocksvc.mulesoft.com/mocks/785042f6-58ea-4e41-b4d7-ce3c98806561 # 
+version: 1.0
+
+/edi:
+ displayName: Receiving Header and Line items
+ post:
+   description: Receiving Header and Line items
+   body: 
+    application/xml:
+      example: !include Examples/EDI_Input.xml
+   responses: 
+      201:
+        body: 
+          application/xml:
+           example: !include Examples/EDI_Input.xml
+       
+            
+          
+     
+
+     
+
